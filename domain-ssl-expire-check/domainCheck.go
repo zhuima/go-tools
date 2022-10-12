@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	// whois "github.com/undiabler/golang-whois"
 	"github.com/likexian/whois"
@@ -21,6 +22,7 @@ type DomainInfo struct {
 	DomainName     string `json:"domain_name"`
 	CreatedDate    string `json:"create_date"`
 	ExpirationDate string `json:"expiration_date"`
+	ExpirationDays int64  `json:"expiration_days"`
 	RegistrarName  string `json:"registrar_name"`
 }
 
@@ -66,11 +68,25 @@ func main() {
 		os.Exit(1)
 	}
 
+	// 获取当前时间
+	currentTime := time.Now()
+	// currentTime := time.Now().Format("02/01/2006")
+	// 根据过期时间求差 获取距离过期时间还剩余多少天
+	difference := result.Domain.ExpirationDateInTime.Sub(currentTime)
+	// fmt.Println("currentTime", int64(difference.Hours()/24))
+	// // 时间戳格式化
+	// afterFormat := result.Domain.ExpirationDateInTime.Format("02/01/2006")
+
+	// // 把时间戳转为unixTime
+	// expireUnixTime, _ := time.Parse("01/02/2006", afterFormat)
+
+	// 时间相减
 	domaininfo := &DomainInfo{
 		DomainName:     DomainName,
 		CreatedDate:    result.Domain.CreatedDate,
 		ExpirationDate: result.Domain.ExpirationDate,
 		RegistrarName:  result.Registrar.Name,
+		ExpirationDays: int64(difference.Hours() / 24),
 	}
 
 	if logLevel == "INFO" {
