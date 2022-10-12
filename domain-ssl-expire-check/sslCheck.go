@@ -18,9 +18,10 @@ type DoaminInfo struct {
 }
 
 type DomainSSLExpireInfo struct {
-	ExpireTime time.Time `json:"expireTime"`
-	BeforeTime time.Time `json:"beforeTime"`
-	DomainInfo *DoaminInfo
+	ExpireTime     time.Time `json:"expireTime"`
+	BeforeTime     time.Time `json:"beforeTime"`
+	ExpirationDays int64     `json:"expiration_days"`
+	DomainInfo     *DoaminInfo
 }
 
 func init() {
@@ -69,12 +70,19 @@ func sslCheck(domainName string) (DomainSSLExpireInfo, error) {
 	expireTime := conn.ConnectionState().PeerCertificates[0].NotAfter
 	beforeTime := conn.ConnectionState().PeerCertificates[0].NotBefore
 
+	// 获取当前时间
+	currentTime := time.Now()
+	// currentTime := time.Now().Format("02/01/2006")
+	// 根据过期时间求差 获取距离过期时间还剩余多少天
+	difference := conn.ConnectionState().PeerCertificates[0].NotAfter.Sub(currentTime)
+
 	result := &DomainSSLExpireInfo{
 		ExpireTime: expireTime,
 		BeforeTime: beforeTime,
 		DomainInfo: &DoaminInfo{
 			DomainName: domainName,
 		},
+		ExpirationDays: int64(difference.Hours() / 24),
 	}
 	return *result, nil
 }
