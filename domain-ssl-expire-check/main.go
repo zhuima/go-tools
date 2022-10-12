@@ -11,6 +11,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/likexian/whois"
 	whoisparser "github.com/likexian/whois-parser"
+
+	cache "github.com/chenyahui/gin-cache"
+	"github.com/chenyahui/gin-cache/persist"
 )
 
 type DoaminInfo struct {
@@ -21,13 +24,15 @@ type DomainExpireInfo struct {
 	DomainName     string `json:"domain_name"`
 	CreatedDate    string `json:"create_date"`
 	ExpirationDate string `json:"expiration_date"`
+	ExpirationDays int64  `json:"expiration_days"`
 	RegistrarName  string `json:"registrar_name"`
 }
 
 type DomainSSLExpireInfo struct {
-	ExpireTime time.Time `json:"expireTime"`
-	BeforeTime time.Time `json:"beforeTime"`
-	DomainInfo *DoaminInfo
+	ExpireTime     time.Time `json:"expireTime"`
+	BeforeTime     time.Time `json:"beforeTime"`
+	ExpirationDays int64     `json:"expiration_days"`
+	DomainInfo     *DoaminInfo
 }
 
 func domainCheck(domainName string) (DomainExpireInfo, error) {
@@ -51,11 +56,18 @@ func domainCheck(domainName string) (DomainExpireInfo, error) {
 		return domainexpireinfo, errors.New(fmt.Sprintf("Error in whois Parse : %v ", err))
 	}
 
+	// 获取当前时间
+	currentTime := time.Now()
+	// currentTime := time.Now().Format("02/01/2006")
+	// 根据过期时间求差 获取距离过期时间还剩余多少天
+	difference := parse_result.Domain.ExpirationDateInTime.Sub(currentTime)
+
 	result := &DomainExpireInfo{
 		DomainName:     domainName,
 		CreatedDate:    parse_result.Domain.CreatedDate,
 		ExpirationDate: parse_result.Domain.ExpirationDate,
 		RegistrarName:  parse_result.Registrar.Name,
+		ExpirationDays: int64(difference.Hours() / 24),
 	}
 
 	return *result, nil
@@ -76,12 +88,19 @@ func sslCheck(domainName string) (DomainSSLExpireInfo, error) {
 	// domainexpireinfo.BeforeTime = beforeTime
 	// domainexpireinfo.DomainInfo.DomainName = domainName
 
+	// 获取当前时间
+	currentTime := time.Now()
+	// currentTime := time.Now().Format("02/01/2006")
+	// 根据过期时间求差 获取距离过期时间还剩余多少天
+	difference := conn.ConnectionState().PeerCertificates[0].NotAfter.Sub(currentTime)
+
 	result := &DomainSSLExpireInfo{
 		ExpireTime: expireTime,
 		BeforeTime: beforeTime,
 		DomainInfo: &DoaminInfo{
 			DomainName: domainName,
 		},
+		ExpirationDays: int64(difference.Hours() / 24),
 	}
 	return *result, nil
 }
@@ -144,10 +163,14 @@ func domainExpireCheckEndpoint(c *gin.Context) {
 }
 
 func main() {
-	r := gin.Default()
+	r := gin.New()
+
+	r.Use(gin.Logger(), gin.Recovery())
+	memoryStore := persist.NewMemoryStore(1 * time.Minute)
+
 	r.GET("/", homePage)
-	r.POST("/sslcheck", sslExpireCheckEndpoint)
-	r.POST("/domaincheck", domainExpireCheckEndpoint)
+	r.POST("/sslcheck", cache.CacheByRequestPath(memoryStore, 2*time.Second), sslExpireCheckEndpoint)
+	r.POST("/domaincheck", cache.CacheByRequestPath(memoryStore, 2*time.Second), domainExpireCheckEndpoint)
 
 	r.Run()
 }
